@@ -1,0 +1,85 @@
+%
+% newiris.m
+%
+
+dataDir = '/Users/erehm/Library/CloudStorage/Box-Box/BeamSeaBird/data/355_532 VPBT';
+
+trialDir = 'iris_test_1mm';
+
+fullDir = fullfile(dataDir, trialDir, '*.csv');
+
+files = dir(fullDir);
+Nfiles = length(files);
+
+csw = 2.25e8;
+t0 = 1.305e-8;
+
+figure(1); clf;
+
+for i = 1:Nfiles
+    trial = files(i).name;
+    fnparts = split(trial, '_');
+    iris_mm = fnparts{3};
+
+    tt = readtable(fn);
+    fn = fullfile(dataDir, trialDir, trial);
+
+    r = tt.time_s - t0;    % * csw / 2;
+
+    subplot(2,1,1)
+    hold on;
+    h = plot(r, tt.ch1Voltage_v);
+    subplot(2,1,2)
+    hold on;
+    h = plot(r, tt.ch3Voltage_v);
+
+end
+
+% subplot(2,1,1)
+% xlim([0,4])
+% subplot(2,1,2)
+% xlim([0,4])
+
+
+figure(2);clf;
+
+
+filter_width = 5;
+mave = ones(1,filter_width);
+
+for i = 1:Nfiles
+    trial = files(i).name;
+    fnparts = split(trial, '_');
+    iris_mm = fnparts{3};
+
+    legstr = [legstr;]
+
+    tt = readtable(fn);
+    fn = fullfile(dataDir, trialDir, trial);
+
+    ch1 = conv(tt.ch1Voltage_v, mave, 'same');
+    ch3 = conv(tt.ch3Voltage_v, mave, 'same');
+    r = (tt.time_s-t0) * csw / 2;
+
+    if (i == 1)
+        norm532 = ch1;
+        norm355 = ch3;
+    end
+
+    subplot(2,1,1)
+    hold on;
+    h = plot(r, ch1./norm532);
+    subplot(2,1,2)
+    hold on;
+    h = plot(r, ch3./norm355);
+
+end
+
+subplot(2,1,1)
+xlim([0,4])
+subplot(2,1,2)
+xlim([0,4])
+
+    
+
+

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lidar Data Processing Pipeline</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        input[type="text"], select {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        input[type="text"] {
+            width: 350px;
+        }
+        input[type="submit"], .browse-btn {
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 5px;
+        }
+        input[type="submit"]:hover, .browse-btn:hover {
+            background-color: #0056b3;
+        }
+        .plot-container {
+            margin-top: 20px;
+        }
+    </style>
+    <script>
+        async function openDirBrowser() {
+            // Try using the modern File System Access API first (Chrome, Edge)
+            if ('showDirectoryPicker' in window) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    // We can't get the full path from the API for security reasons,
+                    // but we can get the name
+                    const dirName = dirHandle.name;
+                    // Construct the path based on BeamSeaBird structure
+                    const suggestedPath = '/Users/erehm/Library/CloudStorage/Box-Box/BeamSeaBird/data/355_532 VPBT/' + dirName;
+                    document.getElementById('directory').value = suggestedPath;
+                    document.getElementById('directoryDisplay').textContent = `Selected directory: ${dirName}`;
+                    return;
+                } catch (err) {
+                    // User cancelled or API not available, fall back to webkitdirectory
+                    console.log('File System Access API not available or cancelled, using fallback');
+                }
+            }
+            
+            // Fallback: Use webkitdirectory (older browsers)
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.mozdirectory = true;
+            input.allowdirs = true;
+            
+            input.onchange = function(event) {
+                handleDirChange(event);
+            };
+            
+            input.onerror = function() {
+                document.body.removeChild(input);
+            };
+            
+            input.style.display = 'none';
+            document.body.appendChild(input);
+            input.click();
+        }
+        
+        function handleDirChange(event) {
+            const input = event.target;
+            if (input.files && input.files.length > 0) {
+                // Extract directory path from the first file's webkitRelativePath
+                const file = input.files[0];
+                const relativePath = file.webkitRelativePath || file.name;
+                
+                // Get the directory part (everything before the last /)
+                const lastSlash = relativePath.lastIndexOf('/');
+                if (lastSlash > 0) {
+                    const dirName = relativePath.substring(0, lastSlash);
+                    const suggestedPath = '/Users/erehm/Library/CloudStorage/Box-Box/BeamSeaBird/data/355_532 VPBT/' + dirName;
+                    document.getElementById('directory').value = suggestedPath;
+                    document.getElementById('directoryDisplay').textContent = `Selected directory: ${dirName}`;
+                } else {
+                    document.getElementById('directoryDisplay').textContent = `Selected: ${relativePath}`;
+                }
+            }
+            
+            // Clean up
+            setTimeout(() => {
+                if (input.parentNode) {
+                    input.parentNode.removeChild(input);
+                }
+            }, 100);
+        }
+    </script>
+</head>
+<body>
+    <h1>Lidar Data Processing Pipeline</h1>
+    <form method="post">
+        <div class="control-group">
+            <label for="directory">Data Directory:</label>
+            <input type="text" name="directory" id="directory" value="{{ directory }}" placeholder="/path/to/data">
+            <button type="button" class="browse-btn" onclick="openDirBrowser()">Browse</button>
+            <div id="directoryDisplay" style="font-size: 12px; color: #666; margin-top: 5px;"></div>
+        </div>
+        <div class="control-group">
+            <label for="pattern">File Pattern:</label>
+            <input type="text" name="pattern" id="pattern" value="{{ pattern }}" placeholder="*.csv">
+        </div>
+        <div class="control-group">
+            <label for="stage">Pipeline Stage:</label>
+            <select name="stage" id="stage">
+                <option value="raw" {% if stage == 'raw' %}selected{% endif %}>Raw</option>
+                <option value="o" {% if stage == 'o' %}selected{% endif %}>Offset (o)</option>
+                <option value="og" {% if stage == 'og' %}selected{% endif %}>Offset + Gain (og)</option>
+                <option value="ogr" {% if stage == 'ogr' %}selected{% endif %}>Offset + Gain + Range (ogr)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="x_axis">X-Axis:</label>
+            <select name="x_axis" id="x_axis">
+                <option value="time" {% if x_axis == 'time' %}selected{% endif %}>Time</option>
+                <option value="range" {% if x_axis == 'range' %}selected{% endif %}>Range</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="t0">T0 (s):</label>
+            <input type="text" name="t0" id="t0" value="{{ t0 }}">
+        </div>
+        <div class="control-group">
+            <label for="narrow_iris">Narrow Iris (mm):</label>
+            <input type="text" name="narrow_iris" id="narrow_iris" value="{{ narrow_iris }}">
+        </div>
+        <div class="control-group">
+            <label for="wide_iris">Wide Iris (mm):</label>
+            <input type="text" name="wide_iris" id="wide_iris" value="{{ wide_iris }}">
+        </div>
+        <div class="control-group">
+            <input type="submit" value="Update Plot">
+        </div>
+    </form>
+    <div class="plot-container">
+        {{ plot_html | safe }}
+    </div>
+</body>
+</html>

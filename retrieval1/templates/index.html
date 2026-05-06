@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Retrieval 1</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            margin: 16px;
+            background: #f6f8fb;
+            color: #1f2937;
+        }
+        h1 {
+            margin-bottom: 8px;
+        }
+        .meta {
+            margin-bottom: 14px;
+            color: #4b5563;
+            font-size: 14px;
+        }
+        form {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 10px 14px;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        label {
+            font-size: 13px;
+            font-weight: 600;
+        }
+        input, select {
+            font-size: 14px;
+            padding: 7px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .actions {
+            margin-top: 10px;
+        }
+        button {
+            background: #0f766e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 9px 14px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #115e59;
+        }
+        .errors {
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            border-radius: 8px;
+            color: #9f1239;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .plot {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 6px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Water-Only Retrieval</h1>
+    <div class="meta">All files containing "target" are ignored. Parsed turbidity keys come from filename: cw0, cw1, add1...add10.</div>
+
+    {% if errors %}
+    <div class="errors">
+        {% for err in errors %}
+        <div>{{ err }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+        <div class="grid">
+            <div class="field">
+                <label for="directory">Data Directory</label>
+                <input id="directory" name="directory" type="text" value="{{ directory }}">
+            </div>
+            <div class="field">
+                <label for="expgrid_path">ExpGrid JSON Path</label>
+                <input id="expgrid_path" name="expgrid_path" type="text" value="{{ expgrid_path }}">
+            </div>
+            <div class="field">
+                <label for="wavelength">Wavelength</label>
+                <select id="wavelength" name="wavelength">
+                    <option value="355" {% if wavelength == '355' %}selected{% endif %}>355 nm (CH1)</option>
+                    <option value="532" {% if wavelength == '532' %}selected{% endif %}>532 nm (CH3)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="stage">Pipeline Stage</label>
+                <select id="stage" name="stage">
+                    <option value="raw" {% if stage == 'raw' %}selected{% endif %}>raw</option>
+                    <option value="o" {% if stage == 'o' %}selected{% endif %}>o</option>
+                    <option value="og" {% if stage == 'og' %}selected{% endif %}>og</option>
+                    <option value="ogr" {% if stage == 'ogr' %}selected{% endif %}>ogr</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="turbidity">Turbidity To Process</label>
+                <select id="turbidity" name="turbidity">
+                    {% for t in ['add1','add2','add3','add4','add5','add6','add7','add8','add9','add10'] %}
+                    <option value="{{ t }}" {% if turbidity == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="clear_water">Clear Water Reference</label>
+                <select id="clear_water" name="clear_water">
+                    <option value="cw0" {% if clear_water == 'cw0' %}selected{% endif %}>cw0</option>
+                    <option value="cw1" {% if clear_water == 'cw1' %}selected{% endif %}>cw1</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="gain">Gain To Process</label>
+                <select id="gain" name="gain">
+                    <option value="2.5" {% if gain == '2.5' %}selected{% endif %}>2.5 V</option>
+                    <option value="3.0" {% if gain == '3.0' %}selected{% endif %}>3.0 V</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="t0_cw">T0 Clear Water (s)</label>
+                <input id="t0_cw" name="t0_cw" type="text" value="{{ t0_cw }}">
+            </div>
+            <div class="field">
+                <label for="t0_turb">T0 Turbidity (s)</label>
+                <input id="t0_turb" name="t0_turb" type="text" value="{{ t0_turb }}">
+            </div>
+            <div class="field">
+                <label for="fit_min">Fit Range Min (m)</label>
+                <input id="fit_min" name="fit_min" type="text" value="{{ fit_min }}">
+            </div>
+            <div class="field">
+                <label for="fit_max">Fit Range Max (m)</label>
+                <input id="fit_max" name="fit_max" type="text" value="{{ fit_max }}">
+            </div>
+            <div class="field">
+                <label for="fit_mode">CW Fit Mode</label>
+                <select id="fit_mode" name="fit_mode">
+                    <option value="spline" {% if fit_mode == 'spline' %}selected{% endif %}>spline</option>
+                    <option value="mean" {% if fit_mode == 'mean' %}selected{% endif %}>mean</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="knots">Internal Knots (comma-separated, m)</label>
+                <input id="knots" name="knots" type="text" value="{{ knots }}">
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit">Process Water Data</button>
+        </div>
+    </form>
+
+    <div class="meta">Resolved directories: CW={{ cw_dir }}, Turbidity={{ turb_dir }}</div>
+    <div class="meta">CW files: {{ cw_water_file_count }} water-only out of {{ cw_file_count }} total. Turbidity files: {{ turb_water_file_count }} water-only out of {{ turb_file_count }} total.</div>
+
+    <div class="plot">{{ plot_html | safe }}</div>
+</body>
+</html>

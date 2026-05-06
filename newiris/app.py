@@ -141,7 +141,7 @@ def index():
     # Default values
     stage = request.form.get('stage', 'raw')
     x_axis = request.form.get('x_axis', 'time')
-    t0_str = request.form.get('t0', '1.305e-8')
+    t0_str = request.form.get('t0', '-1.305e-8')
     directory = request.form.get('directory', '/Users/erehm/Library/CloudStorage/Box-Box/BeamSeaBird/data/355_532 VPBT/')
     pattern = request.form.get('pattern', '*.csv')
     narrow_iris_str = request.form.get('narrow_iris', '0.75')

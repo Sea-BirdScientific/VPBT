@@ -140,14 +140,6 @@
                 </select>
             </div>
             <div class="field">
-                <label for="t0_cw">T0 Clear Water (s)</label>
-                <input id="t0_cw" name="t0_cw" type="text" value="{{ t0_cw }}">
-            </div>
-            <div class="field">
-                <label for="t0_turb">T0 Turbidity (s)</label>
-                <input id="t0_turb" name="t0_turb" type="text" value="{{ t0_turb }}">
-            </div>
-            <div class="field">
                 <label for="fit_min">Fit Range Min (m)</label>
                 <input id="fit_min" name="fit_min" type="text" value="{{ fit_min }}">
             </div>
@@ -160,6 +152,7 @@
                 <select id="fit_mode" name="fit_mode">
                     <option value="spline" {% if fit_mode == 'spline' %}selected{% endif %}>spline</option>
                     <option value="mean" {% if fit_mode == 'mean' %}selected{% endif %}>mean</option>
+                    <option value="filtering" {% if fit_mode == 'filtering' %}selected{% endif %}>filtering (11-med + 11-mean)</option>
                 </select>
             </div>
             <div class="field">

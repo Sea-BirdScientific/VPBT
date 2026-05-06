@@ -98,10 +98,13 @@ def parse_knots(knots_str):
         knots.append(float(p))
     return knots
 
-
-def load_pmt_models(expgrid_path):
+def load_expgrid(expgrid_path):
     with open(expgrid_path, "r") as f:
         meta = json.load(f)
+    return meta 
+
+def load_pmt_models(expgrid_path):
+    meta = load_expgrid(expgrid_path)
     pmt_cal1 = PMTCal.from_expgrid(meta, "R9880U210")
     pmt_cal3 = PMTCal.from_expgrid(meta, "R9880U20")
     return pmt_cal1, pmt_cal3
@@ -186,6 +189,14 @@ def build_piecewise_cubic_fit(x, y, fit_min, fit_max, knots):
             return None, None, None
 
     return None, None, None
+
+
+def apply_running_median_mean(y, window=11):
+    """Same-length smoothing: running median then running mean."""
+    s = pd.Series(y)
+    s = s.rolling(window=window, center=True, min_periods=1).median()
+    s = s.rolling(window=window, center=True, min_periods=1).mean()
+    return s.to_numpy()
 
 
 def canonical_iris(iris_mm):
@@ -280,18 +291,18 @@ def index():
     directory = request.form.get("directory", DEFAULT_DATA_DIR)
     expgrid_path = request.form.get("expgrid_path", DEFAULT_EXPGRID)
 
-    if fit_mode not in ("spline", "mean"):
+    if fit_mode not in ("spline", "mean", "filtering"):
         fit_mode = DEFAULT_FIT_MODE
 
-    try:
-        t0_cw = float(request.form.get("t0_cw", str(DEFAULT_T0_CW)))
-    except ValueError:
-        t0_cw = DEFAULT_T0_CW
+    # try:
+    #     t0_cw = float(request.form.get("t0_cw", str(DEFAULT_T0_CW)))
+    # except ValueError:
+    #     t0_cw = DEFAULT_T0_CW
 
-    try:
-        t0_turb = float(request.form.get("t0_turb", str(DEFAULT_T0_TURB)))
-    except ValueError:
-        t0_turb = DEFAULT_T0_TURB
+    # try:
+    #     t0_turb = float(request.form.get("t0_turb", str(DEFAULT_T0_TURB)))
+    # except ValueError:
+    #     t0_turb = DEFAULT_T0_TURB
 
     try:
         fit_min = float(request.form.get("fit_min", str(DEFAULT_FIT_MIN)))
@@ -333,6 +344,10 @@ def index():
         except Exception as e:
             errors.append(f"Could not load PMT calibration metadata: {e}")
 
+    meta = load_expgrid(expgrid_path)
+    t0_cw   = meta['trials'][clear_water_turbidity]['t0'] if 'trials' in meta and clear_water_turbidity in meta['trials'] and 't0' in meta['trials'][clear_water_turbidity] else DEFAULT_T0_CW
+    t0_turb = meta['trials'][selected_turbidity]['t0'] if 'trials' in meta and selected_turbidity in meta['trials'] and 't0' in meta['trials'][selected_turbidity] else DEFAULT_T0_TURB
+
     cw_dir = find_turbidity_dir(directory, clear_water_turbidity)
     turb_dir = find_turbidity_dir(directory, selected_turbidity)
 
@@ -368,6 +383,7 @@ def index():
     cw_spline = None
     cw_fit_line = None
     cw_mean_level = None
+    cw_filter_fit = None
 
     cw_iris_map = grouped.get(clear_water_turbidity, {}).get(selected_gain_key, {})
     cw_wide = select_one_curve(cw_iris_map.get(1.5, []))
@@ -378,18 +394,27 @@ def index():
             errors.append("CW wide and narrow x-grids are not identical for selected gain.")
         else:
             x_ratio, y_ratio = cw_ratio
-            fit_mask = np.isfinite(x_ratio) & np.isfinite(y_ratio) & (x_ratio >= fit_min) & (x_ratio <= fit_max)
-            if np.any(fit_mask):
-                fit_x_base = x_ratio[fit_mask]
-                fit_y_base = y_ratio[fit_mask]
-                if fit_mode == "mean":
-                    cw_mean_level = float(np.mean(fit_y_base))
-                    cw_fit_line = (fit_x_base, np.full_like(fit_x_base, cw_mean_level, dtype=float))
-                else:
-                    spline, fit_x, fit_y = build_piecewise_cubic_fit(x_ratio, y_ratio, fit_min, fit_max, knots)
-                    if spline is not None:
-                        cw_spline = spline
-                        cw_fit_line = (fit_x, fit_y)
+            if fit_mode == "filtering":
+                valid_full = np.isfinite(x_ratio) & np.isfinite(y_ratio)
+                if np.any(valid_full):
+                    fit_x_full = x_ratio[valid_full]
+                    fit_y_full = y_ratio[valid_full]
+                    fit_y_filtered = apply_running_median_mean(fit_y_full, window=41)
+                    cw_filter_fit = (fit_x_full, fit_y_filtered)
+                    cw_fit_line = cw_filter_fit
+            else:
+                fit_mask = np.isfinite(x_ratio) & np.isfinite(y_ratio) & (x_ratio >= fit_min) & (x_ratio <= fit_max)
+                if np.any(fit_mask):
+                    fit_x_base = x_ratio[fit_mask]
+                    fit_y_base = y_ratio[fit_mask]
+                    if fit_mode == "mean":
+                        cw_mean_level = float(np.mean(fit_y_base))
+                        cw_fit_line = (fit_x_base, np.full_like(fit_x_base, cw_mean_level, dtype=float))
+                    else:
+                        spline, fit_x, fit_y = build_piecewise_cubic_fit(x_ratio, y_ratio, fit_min, fit_max, knots)
+                        if spline is not None:
+                            cw_spline = spline
+                            cw_fit_line = (fit_x, fit_y)
 
     turb_ratio = None
     turb_iris_map = grouped.get(selected_turbidity, {}).get(selected_gain_key, {})
@@ -401,10 +426,13 @@ def index():
             errors.append("Selected turbidity wide and narrow x-grids are not identical for selected gain.")
 
     attenuation = None
-    if turb_ratio is not None and (cw_spline is not None or cw_mean_level is not None):
+    if turb_ratio is not None and (cw_spline is not None or cw_mean_level is not None or cw_filter_fit is not None):
         x_turb, kprime = turb_ratio
         if cw_mean_level is not None:
             kr_fit = np.full_like(x_turb, cw_mean_level, dtype=float)
+        elif cw_filter_fit is not None:
+            fit_x, fit_y = cw_filter_fit
+            kr_fit = np.interp(x_turb, fit_x, fit_y, left=np.nan, right=np.nan)
         else:
             kr_fit = cw_spline(x_turb)
 
@@ -599,6 +627,7 @@ def index():
     fig.update_yaxes(title_text=y_label, row=2, col=1)
     fig.update_yaxes(title_text="K'_R", row=2, col=2)
     fig.update_yaxes(title_text="c (1/m)", row=3, col=2)
+    fig.update_yaxes(range=[-0.1, 0.5], row=3, col=2)
 
     fig.update_layout(
         height=1100,
@@ -615,7 +644,8 @@ def index():
         ),
         title=(
             f"Water-only retrieval | stage={stage} | wavelength={wavelength_nm} nm | "
-            f"CW={clear_water_turbidity} | turbidity={selected_turbidity} | gain={selected_gain_str} V"
+            f"CW={clear_water_turbidity} | turbidity={selected_turbidity} | gain={selected_gain_str} V |"
+            f"t0 CW={t0_cw:.3e} s | t0 turb={t0_turb:.3e} s "
         ),
     )
 
@@ -626,6 +656,8 @@ def index():
     if cw_ratio is not None and cw_fit_line is None:
         if fit_mode == "mean":
             errors.append("Could not build CW mean fit in the selected fit range.")
+        elif fit_mode == "filtering":
+            errors.append("Could not build CW filtering fit in the selected fit range.")
         else:
             errors.append("Could not build CW piecewise cubic fit in the selected fit range.")
     if attenuation is None:
@@ -651,8 +683,6 @@ def index():
         directory=directory,
         cw_dir=os.path.basename(cw_dir) if cw_dir else "n/a",
         turb_dir=os.path.basename(turb_dir) if turb_dir else "n/a",
-        t0_cw=t0_cw,
-        t0_turb=t0_turb,
         fit_min=fit_min,
         fit_max=fit_max,
         knots=knots_str,
